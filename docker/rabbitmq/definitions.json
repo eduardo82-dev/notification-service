@@ -1,0 +1,59 @@
+{
+  "vhosts": [
+    { "name": "notifications" }
+  ],
+  "exchanges": [
+    {
+      "name": "notifications.direct",
+      "vhost": "notifications",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "notifications.dead_letter",
+      "vhost": "notifications",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false
+    }
+  ],
+  "queues": [
+    {
+      "name": "notifications",
+      "vhost": "notifications",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "notifications.dead_letter",
+        "x-dead-letter-routing-key": "notifications.failed",
+        "x-message-ttl": 86400000
+      }
+    },
+    {
+      "name": "notifications.failed",
+      "vhost": "notifications",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "notifications.direct",
+      "vhost": "notifications",
+      "destination": "notifications",
+      "destination_type": "queue",
+      "routing_key": "notifications",
+      "arguments": {}
+    },
+    {
+      "source": "notifications.dead_letter",
+      "vhost": "notifications",
+      "destination": "notifications.failed",
+      "destination_type": "queue",
+      "routing_key": "notifications.failed",
+      "arguments": {}
+    }
+  ]
+}
