@@ -107,14 +107,16 @@ docker compose exec app01-php php artisan l5-swagger:generate
 
 ### 2. Проверить работу
 
-| URL | Описание                                        |
-|-----|-------------------------------------------------|
-| http://localhost:8081/api/documentation | Swagger UI                                      |
-| http://localhost:8081/api/v1/health | Health check                                    |
-| http://localhost:15672 | RabbitMQ Management (rabbit_user / rabbit_pass) |
-| http://localhost:8025/ | Mailplit (local Email server)                   |
+| URL                                                | Описание                                        |
+|----------------------------------------------------|-------------------------------------------------|
+| http://localhost:8081/api/documentation            | Swagger UI                                      |
+| http://localhost:8081/api/v1/health                | Health check                                    |
+| http://localhost:15672                             | RabbitMQ Management (rabbit_user / rabbit_pass) |
+| http://localhost:8025/                             | Mailplit (local Email server)                   |
+| docker compose exec -w /var/www app01-php bash     | зайти в под
 
 ---
+
 
 ## 📡 API Endpoints
 

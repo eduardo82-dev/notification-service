@@ -15,6 +15,7 @@ use App\Domain\Outbox\Entities\OutboxMessage;
 use App\Domain\Outbox\Repositories\OutboxRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 final readonly class CreateNotificationHandler
 {
@@ -22,24 +23,43 @@ final readonly class CreateNotificationHandler
         private NotificationRepositoryInterface $notificationRepository,
         private OutboxRepositoryInterface $outboxRepository,
         private LoggerInterface $logger,
-    ) {}
+    ) {
+    }
 
+    /**
+     * @throws Throwable
+     */
     public function handle(CreateNotificationCommand $command): NotificationDTO
     {
-        $channels = array_map(
-            fn (string $ch) => NotificationChannel::from($ch),
-            $command->channels
-        );
+        // Validate and convert incoming values to value objects. If any conversion fails,
+        // rethrow as InvalidArgumentException so callers receive a 4xx error instead of 500.
+        try {
+            $channels = array_map(
+                fn (string $ch) => NotificationChannel::from($ch),
+                $command->channels
+            );
+
+            $type = NotificationType::from($command->type);
+            $priority = NotificationPriority::from($command->priority);
+        } catch (\ValueError | \TypeError $e) {
+            $this->logger->warning('Invalid notification parameters', [
+                'error' => $e->getMessage(),
+                'user_id' => $command->userId,
+            ]);
+
+            throw new \InvalidArgumentException('Invalid notification parameters: ' . $e->getMessage(), 0, $e);
+        }
 
         $notification = Notification::create(
             userId: $command->userId,
-            type: NotificationType::from($command->type),
+            type: $type,
             channels: $channels,
             payload: $command->payload,
-            priority: NotificationPriority::from($command->priority),
+            priority: $priority,
         );
 
-        return DB::transaction(function () use ($notification, $command): NotificationDTO {
+        try {
+            return DB::transaction(function () use ($notification): NotificationDTO {
             // 1. Persist the notification
             $savedNotification = $this->notificationRepository->save($notification);
 
@@ -62,10 +82,12 @@ final readonly class CreateNotificationHandler
                 ],
             );
 
-            $this->outboxRepository->save($outboxMessage);
+            $savedOutbox = $this->outboxRepository->save($outboxMessage);
 
             $this->logger->info('Notification created and queued via OUTBOX', [
                 'notification_uuid' => $savedNotification->getUuid(),
+                'notification_id'   => $savedNotification->getId()->getValue(),
+                'outbox_id'         => $savedOutbox->getId(),
                 'user_id'           => $savedNotification->getUserId(),
                 'type'              => $savedNotification->getType()->getValue(),
                 'channels'          => array_map(
@@ -76,5 +98,15 @@ final readonly class CreateNotificationHandler
 
             return NotificationDTO::fromEntity($savedNotification);
         });
+        } catch (Throwable $e) {
+            // Ensure we log context for failures and rethrow so higher layers can decide mapping.
+            $this->logger->error('Failed to create notification', [
+                'user_id' => $notification->getUserId(),
+                'uuid' => $notification->getUuid(),
+                'error' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
     }
 }
